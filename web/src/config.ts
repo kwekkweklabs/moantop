@@ -20,13 +20,13 @@ interface AppConfig {
 }
 
 export const config: AppConfig = {
-  appName: 'Moan Mac',
-  appDescription: 'Smack it. It moans.',
+  appName: 'MoanTop',
+  appDescription: 'Smack your laptop and it moans back. The funniest prank website on the internet.',
 
   // Social links
   links: {
     twitter: '',
-    github: '',
+    github: 'https://github.com/kelvinkn17/moantop',
     telegram: '',
     discord: '',
     docs: '',

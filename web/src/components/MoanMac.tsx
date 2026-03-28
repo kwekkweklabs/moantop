@@ -6,11 +6,15 @@ import { env } from '@/env'
 type Gender = 'male' | 'female'
 
 const DEBUG = env.VITE_DEBUG === 'true'
-// low-freq energy threshold for impact detection (0-350Hz range)
-const SMACK_THRESHOLD = 40
-// ratio: if high-freq energy is more than this * low-freq, it's voice not a smack
-const VOICE_RATIO = 1.5
-const SMACK_COOLDOWN = 120
+// low-freq energy threshold for impact detection (0-350Hz range, values 0-255)
+// ~130 filters out ambient noise (fans, AC, voices) while catching physical hits
+const SMACK_THRESHOLD = 130
+// ratio: if mid-freq energy exceeds this fraction of low-freq, it's voice
+const VOICE_RATIO = 1.2
+// cooldown after trigger (reverb from laptop chassis lasts ~300-500ms)
+const SMACK_COOLDOWN = 600
+// extra deaf period after last sound ends
+const POST_SOUND_DEAF = 400
 
 const SOUND_BANK: Record<Gender, { moans: string[]; speeches: string[] }> = {
   female: {
@@ -27,14 +31,17 @@ const STREAK_MIN = 3
 
 export default function MoanMac() {
   const [gender, setGender] = useState<Gender>(
-    () => (localStorage.getItem('moan-gender') as Gender) || 'female',
+    () => (typeof window !== 'undefined' && (localStorage.getItem('moan-gender') as Gender)) || 'female',
   )
   const [hitCount, setHitCount] = useState(0)
   const [soundType, setSoundType] = useState<'moan' | 'speech'>('moan')
   const [isListening, setIsListening] = useState(false)
   const [micError, setMicError] = useState(false)
+  const [paused, setPaused] = useState(false)
   const [debugLog, setDebugLog] = useState<string[]>([])
 
+  const pausedRef = useRef(false)
+  const deafUntilRef = useRef(0)
   const buffersRef = useRef<Map<string, AudioBuffer>>(new Map())
   const recentMoansRef = useRef<string[]>([])
   const lastSpeechRef = useRef('')
@@ -51,6 +58,7 @@ export default function MoanMac() {
   const rapidCountRef = useRef(0)
   const lastHitRef = useRef(0)
   const handleSpankRef = useRef<() => void>(() => {})
+  const monitorGenRef = useRef(0)
 
   const log = useCallback((msg: string) => {
     if (!DEBUG) return
@@ -101,6 +109,10 @@ export default function MoanMac() {
 
       const cleanup = () => {
         activeSoundsRef.current = activeSoundsRef.current.filter((e) => e !== entry)
+        // when last sound ends, add brief deaf period so reverb doesn't re-trigger
+        if (activeSoundsRef.current.length === 0) {
+          deafUntilRef.current = Date.now() + POST_SOUND_DEAF
+        }
         opts?.onEnded?.()
       }
       source.onended = cleanup
@@ -214,30 +226,36 @@ export default function MoanMac() {
   )
 
   const startMonitor = useCallback(() => {
-    const analyser = analyserRef.current
-    if (!analyser) return
+    // each call gets a unique generation id, stale loops self-terminate
+    const gen = ++monitorGenRef.current
 
-    // frequency domain: fftSize=512 at ~48kHz gives ~93Hz per bin
-    // bins 0-3 = 0~375Hz (impacts), bins 4-15 = 375~1500Hz (voice fundamentals)
-    const freqData = new Uint8Array(analyser.frequencyBinCount)
-    const LOW_END = 4 // bins 0-3 for low freq
-    const MID_END = 16 // bins 4-15 for mid/voice freq
+    const freqData = new Uint8Array(256) // fftSize=512 → 256 bins
+    const LOW_END = 4
+    const MID_END = 16
 
     const loop = () => {
+      // kill this loop if a newer one was started (HMR, remount, retry)
+      if (monitorGenRef.current !== gen) return
+
+      const analyser = analyserRef.current
+      if (!analyser) return
+
       analyser.getByteFrequencyData(freqData)
 
-      if (!cooldownRef.current) {
-        // average energy in low freq range (impacts, thuds)
+      const canDetect =
+        !cooldownRef.current &&
+        !pausedRef.current &&
+        activeSoundsRef.current.length === 0 &&
+        Date.now() > deafUntilRef.current
+      if (canDetect) {
         let lowSum = 0
         for (let i = 0; i < LOW_END; i++) lowSum += freqData[i]
         const lowAvg = lowSum / LOW_END
 
-        // average energy in mid freq range (voice, speech)
         let midSum = 0
         for (let i = LOW_END; i < MID_END; i++) midSum += freqData[i]
         const midAvg = midSum / (MID_END - LOW_END)
 
-        // trigger if low freq is strong enough AND not dominated by mid/voice freq
         if (lowAvg > SMACK_THRESHOLD && midAvg < lowAvg * VOICE_RATIO) {
           handleSpankRef.current()
           cooldownRef.current = true
@@ -313,12 +331,57 @@ export default function MoanMac() {
     }
   }, [])
 
+  const togglePause = useCallback(() => {
+    setPaused((prev) => {
+      const next = !prev
+      pausedRef.current = next
+      if (next) duckActive(true)
+      return next
+    })
+  }, [duckActive])
+
   const accent = gender === 'female' ? 'text-pink-400' : 'text-blue-400'
   const accentBorder = gender === 'female' ? 'border-pink-400/30' : 'border-blue-400/30'
   const accentBg = gender === 'female' ? 'hover:bg-pink-400/10' : 'hover:bg-blue-400/10'
 
   return (
     <div className="h-dvh w-screen bg-black flex flex-col items-center justify-center overflow-hidden select-none relative">
+      {/* logo */}
+      <h1 className={cnm('absolute top-8 text-2xl sm:text-3xl font-bold tracking-[-0.06em] transition-colors', accent)}>
+        MOANTOP.COM
+      </h1>
+
+      {/* pause/play toggle */}
+      {isListening && (
+        <button
+          onClick={togglePause}
+          className="absolute top-8 right-8 text-neutral-600 hover:text-neutral-400 transition-colors"
+          aria-label={paused ? 'Resume' : 'Pause'}
+        >
+          {paused ? (
+            <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
+              <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+            </svg>
+          )}
+        </button>
+      )}
+
+      {/* paused overlay */}
+      {paused && (
+        <div
+          className="absolute inset-0 bg-black/60 flex items-center justify-center z-10 cursor-pointer"
+          onClick={togglePause}
+        >
+          <span className="text-neutral-500 text-4xl sm:text-5xl font-bold tracking-[0.2em] font-mono">
+            PAUSED
+          </span>
+        </div>
+      )}
+
       <RobotFace gender={gender} hitCount={hitCount} soundType={soundType} />
 
       {!isListening && (
@@ -328,7 +391,7 @@ export default function MoanMac() {
             startListening()
           }}
           className={cnm(
-            'mt-8 px-6 py-3 border rounded-none text-sm font-mono tracking-wider uppercase transition-colors',
+            'mt-10 px-8 py-4 border rounded-none text-base sm:text-lg font-mono tracking-wider uppercase transition-colors',
             accentBorder,
             accent,
             accentBg,
@@ -359,7 +422,7 @@ export default function MoanMac() {
           })
         }}
         className={cnm(
-          'absolute bottom-12 px-4 py-2 border rounded-none text-xs font-mono tracking-wider uppercase transition-colors',
+          'absolute bottom-12 px-5 py-2.5 border rounded-none text-sm sm:text-base font-mono tracking-wider uppercase transition-colors',
           accentBorder,
           accent,
           accentBg,
@@ -375,10 +438,10 @@ export default function MoanMac() {
         rel="noopener noreferrer"
         className="absolute bottom-4 flex items-center gap-1.5 text-neutral-600 hover:text-neutral-400 transition-colors"
       >
-        <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+        <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
           <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z" />
         </svg>
-        <span className="text-[10px] font-mono">kelvinkn17/moantop</span>
+        <span className="text-xs font-mono">kelvinkn17/moantop</span>
       </a>
 
       {DEBUG && (

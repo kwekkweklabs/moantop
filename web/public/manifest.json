@@ -1,6 +1,7 @@
 {
-  "short_name": "Web Starter",
-  "name": "Kwek Labs Web Starter",
+  "short_name": "MoanTop",
+  "name": "MoanTop - Smack Your Laptop, It Moans",
+  "description": "Smack your laptop and it moans back. The funniest prank website.",
   "icons": [
     {
       "src": "favicon.ico",
@@ -18,8 +19,8 @@
       "sizes": "512x512"
     }
   ],
-  "start_url": ".",
+  "start_url": "/",
   "display": "standalone",
-  "theme_color": "#171717",
-  "background_color": "#171717"
+  "theme_color": "#000000",
+  "background_color": "#000000"
 }

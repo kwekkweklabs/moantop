@@ -22,26 +22,19 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
   errorComponent: ({ error, reset }) => <ErrorPage error={error} reset={reset} />,
   head: () => ({
     meta: [
-      {
-        charSet: 'utf-8',
-      },
-      {
-        name: 'viewport',
-        content: 'width=device-width, initial-scale=1',
-      },
-      {
-        title: 'Moan Mac',
-      },
-      {
-        name: 'description',
-        content: 'Smack it. It moans.',
-      },
+      { charSet: 'utf-8' },
+      { name: 'viewport', content: 'width=device-width, initial-scale=1' },
+      { title: 'MoanTop - Smack Your Laptop, It Moans' },
+      { name: 'description', content: 'Smack your laptop and it moans back. The funniest prank website on the internet.' },
+      { name: 'theme-color', content: '#000000' },
+      { name: 'robots', content: 'index, follow' },
+      { name: 'author', content: 'MoanTop' },
     ],
     links: [
-      {
-        rel: 'stylesheet',
-        href: appCss,
-      },
+      { rel: 'stylesheet', href: appCss },
+      { rel: 'canonical', href: 'https://moantop.com' },
+      { rel: 'icon', href: '/favicon.ico' },
+      { rel: 'manifest', href: '/manifest.json' },
     ],
   }),
 
@@ -53,6 +46,22 @@ function RootDocument({ children }: { children: React.ReactNode }) {
     <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              '@context': 'https://schema.org',
+              '@type': 'WebApplication',
+              name: 'MoanTop',
+              url: 'https://moantop.com',
+              description: 'Smack your laptop and it moans back. The funniest prank website on the internet. Uses your microphone to detect physical hits.',
+              applicationCategory: 'EntertainmentApplication',
+              operatingSystem: 'Any',
+              offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+              author: { '@type': 'Person', name: 'kelvinkn17', url: 'https://github.com/kelvinkn17' },
+            }),
+          }}
+        />
         <script
           dangerouslySetInnerHTML={{
             __html: `
