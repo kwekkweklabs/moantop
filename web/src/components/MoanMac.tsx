@@ -6,7 +6,10 @@ import { env } from '@/env'
 type Gender = 'male' | 'female'
 
 const DEBUG = env.VITE_DEBUG === 'true'
-const SMACK_THRESHOLD = 0.15
+// low-freq energy threshold for impact detection (0-350Hz range)
+const SMACK_THRESHOLD = 40
+// ratio: if high-freq energy is more than this * low-freq, it's voice not a smack
+const VOICE_RATIO = 1.5
 const SMACK_COOLDOWN = 120
 
 const SOUND_BANK: Record<Gender, { moans: string[]; speeches: string[] }> = {
@@ -214,20 +217,28 @@ export default function MoanMac() {
     const analyser = analyserRef.current
     if (!analyser) return
 
-    const buffer = new Uint8Array(analyser.fftSize)
+    // frequency domain: fftSize=512 at ~48kHz gives ~93Hz per bin
+    // bins 0-3 = 0~375Hz (impacts), bins 4-15 = 375~1500Hz (voice fundamentals)
+    const freqData = new Uint8Array(analyser.frequencyBinCount)
+    const LOW_END = 4 // bins 0-3 for low freq
+    const MID_END = 16 // bins 4-15 for mid/voice freq
 
     const loop = () => {
-      analyser.getByteTimeDomainData(buffer)
+      analyser.getByteFrequencyData(freqData)
 
       if (!cooldownRef.current) {
-        let sum = 0
-        for (let i = 0; i < buffer.length; i++) {
-          const v = (buffer[i] - 128) / 128
-          sum += v * v
-        }
-        const rms = Math.sqrt(sum / buffer.length)
+        // average energy in low freq range (impacts, thuds)
+        let lowSum = 0
+        for (let i = 0; i < LOW_END; i++) lowSum += freqData[i]
+        const lowAvg = lowSum / LOW_END
 
-        if (rms > SMACK_THRESHOLD) {
+        // average energy in mid freq range (voice, speech)
+        let midSum = 0
+        for (let i = LOW_END; i < MID_END; i++) midSum += freqData[i]
+        const midAvg = midSum / (MID_END - LOW_END)
+
+        // trigger if low freq is strong enough AND not dominated by mid/voice freq
+        if (lowAvg > SMACK_THRESHOLD && midAvg < lowAvg * VOICE_RATIO) {
           handleSpankRef.current()
           cooldownRef.current = true
           setTimeout(() => {
