@@ -11,10 +11,8 @@ const DEBUG = env.VITE_DEBUG === 'true'
 const SMACK_THRESHOLD = 130
 // ratio: if mid-freq energy exceeds this fraction of low-freq, it's voice
 const VOICE_RATIO = 1.2
-// cooldown after trigger (reverb from laptop chassis lasts ~300-500ms)
-const SMACK_COOLDOWN = 600
-// extra deaf period after last sound ends
-const POST_SOUND_DEAF = 400
+// cooldown: long enough for smack reverb to die, short enough to allow rapid hits
+const SMACK_COOLDOWN = 350
 
 const SOUND_BANK: Record<Gender, { moans: string[]; speeches: string[] }> = {
   female: {
@@ -41,7 +39,6 @@ export default function MoanMac() {
   const [debugLog, setDebugLog] = useState<string[]>([])
 
   const pausedRef = useRef(false)
-  const deafUntilRef = useRef(0)
   const buffersRef = useRef<Map<string, AudioBuffer>>(new Map())
   const recentMoansRef = useRef<string[]>([])
   const lastSpeechRef = useRef('')
@@ -109,10 +106,6 @@ export default function MoanMac() {
 
       const cleanup = () => {
         activeSoundsRef.current = activeSoundsRef.current.filter((e) => e !== entry)
-        // when last sound ends, add brief deaf period so reverb doesn't re-trigger
-        if (activeSoundsRef.current.length === 0) {
-          deafUntilRef.current = Date.now() + POST_SOUND_DEAF
-        }
         opts?.onEnded?.()
       }
       source.onended = cleanup
@@ -150,8 +143,9 @@ export default function MoanMac() {
     lastHitRef.current = now
     rapidCountRef.current = gap < 600 ? rapidCountRef.current + 1 : 1
 
-    // fade out whatever is currently playing so it doesn't pile up
-    duckActive()
+    // interrupt everything, including speeches
+    duckActive(true)
+    speechActiveRef.current = false
 
     const baseVol = gender === 'male' ? 0.85 : 0.7
     const vol = baseVol + Math.random() * (1 - baseVol)
@@ -242,12 +236,7 @@ export default function MoanMac() {
 
       analyser.getByteFrequencyData(freqData)
 
-      const canDetect =
-        !cooldownRef.current &&
-        !pausedRef.current &&
-        activeSoundsRef.current.length === 0 &&
-        Date.now() > deafUntilRef.current
-      if (canDetect) {
+      if (!cooldownRef.current && !pausedRef.current) {
         let lowSum = 0
         for (let i = 0; i < LOW_END; i++) lowSum += freqData[i]
         const lowAvg = lowSum / LOW_END
