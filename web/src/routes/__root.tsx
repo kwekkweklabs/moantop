@@ -32,7 +32,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
     ],
     links: [
       { rel: 'stylesheet', href: appCss },
-      { rel: 'canonical', href: 'https://moantop.com' },
+      { rel: 'canonical', href: 'https://moantop.xyz' },
       { rel: 'icon', href: '/favicon.ico' },
       { rel: 'manifest', href: '/manifest.json' },
     ],
@@ -53,7 +53,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
               '@context': 'https://schema.org',
               '@type': 'WebApplication',
               name: 'MoanTop',
-              url: 'https://moantop.com',
+              url: 'https://moantop.xyz',
               description: 'Smack your laptop and it moans back. The funniest prank website on the internet. Uses your microphone to detect physical hits.',
               applicationCategory: 'EntertainmentApplication',
               operatingSystem: 'Any',

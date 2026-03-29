@@ -4,7 +4,7 @@ import MoanMac from '@/components/MoanMac'
 const TITLE = 'MoanTop - Smack Your Laptop, It Moans | Funny Prank Website'
 const DESC =
   'Smack your laptop and it moans back. The funniest prank website on the internet. Uses your microphone to detect physical hits. Try it with friends, go viral. Pukul laptop desah, website desahan lucu.'
-const URL = 'https://moantop.com'
+const URL = 'https://moantop.xyz'
 const OG_IMAGE = `${URL}/og.png`
 
 export const Route = createFileRoute('/')({

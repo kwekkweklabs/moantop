@@ -27,9 +27,10 @@ export default function ErrorPage({ error, reset }: ErrorPageProps) {
   const errorStack = error?.stack
 
   const handleCopy = async () => {
+    const url = typeof window !== 'undefined' ? window.location.href : ''
     const parts = [
       `Error: ${errorMessage}`,
-      `URL: ${window.location.href}`,
+      `URL: ${url}`,
       `Time: ${new Date().toISOString()}`,
     ]
     if (errorStack) parts.push(`\nStack:\n${errorStack}`)

@@ -1,6 +1,17 @@
+# dependencies
+node_modules
+
+# env
+.env
+.env.local
+*.env.local
+
 # build artifacts
 .nitro
 .tanstack
 .wrangler
 .output
 .vinxi
+
+# system
+.DS_Store

@@ -236,7 +236,7 @@ export default function RobotFace({ gender, hitCount, soundType }: RobotFaceProp
     <svg
       ref={faceRef}
       viewBox="0 0 200 200"
-      className="w-64 h-64 sm:w-80 sm:h-80 md:w-96 md:h-96"
+      className="w-72 h-72 sm:w-96 sm:h-96 md:w-[28rem] md:h-[28rem]"
     >
       {/* head outline */}
       <rect

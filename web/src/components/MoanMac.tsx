@@ -6,12 +6,15 @@ import { env } from '@/env'
 type Gender = 'male' | 'female'
 
 const DEBUG = env.VITE_DEBUG === 'true'
-// low-freq energy threshold for impact detection (0-350Hz range, values 0-255)
-// ~130 filters out ambient noise (fans, AC, voices) while catching physical hits
-const SMACK_THRESHOLD = 130
-// ratio: if mid-freq energy exceeds this fraction of low-freq, it's voice
+// spike detection: trigger when low-freq jumps this many times above running average
+const SPIKE_FACTOR = 2
+// minimum absolute floor so silence doesn't trigger (0-255 scale)
+const MIN_THRESHOLD = 30
+// how fast the running average adapts (lower = slower, more stable)
+const AVG_SMOOTHING = 0.05
+// ratio: if mid-freq exceeds this fraction of low-freq, it's voice
 const VOICE_RATIO = 1.2
-// cooldown: long enough for smack reverb to die, short enough to allow rapid hits
+// cooldown between triggers
 const SMACK_COOLDOWN = 350
 
 const SOUND_BANK: Record<Gender, { moans: string[]; speeches: string[] }> = {
@@ -223,12 +226,13 @@ export default function MoanMac() {
     // each call gets a unique generation id, stale loops self-terminate
     const gen = ++monitorGenRef.current
 
-    const freqData = new Uint8Array(256) // fftSize=512 → 256 bins
+    const freqData = new Uint8Array(256)
     const LOW_END = 4
     const MID_END = 16
+    let runningAvg = MIN_THRESHOLD
+    let warmup = 30 // ~0.5s at 60fps to calibrate before detecting
 
     const loop = () => {
-      // kill this loop if a newer one was started (HMR, remount, retry)
       if (monitorGenRef.current !== gen) return
 
       const analyser = analyserRef.current
@@ -236,21 +240,35 @@ export default function MoanMac() {
 
       analyser.getByteFrequencyData(freqData)
 
+      let lowSum = 0
+      for (let i = 0; i < LOW_END; i++) lowSum += freqData[i]
+      const lowAvg = lowSum / LOW_END
+
+      // asymmetric smoothing: decay fast so avg recovers after speaker feedback
+      const alpha = lowAvg < runningAvg ? 0.15 : AVG_SMOOTHING
+      runningAvg = runningAvg * (1 - alpha) + lowAvg * alpha
+
+      if (warmup > 0) {
+        warmup--
+        rafRef.current = requestAnimationFrame(loop)
+        return
+      }
+
       if (!cooldownRef.current && !pausedRef.current) {
-        let lowSum = 0
-        for (let i = 0; i < LOW_END; i++) lowSum += freqData[i]
-        const lowAvg = lowSum / LOW_END
+        const isSpike = lowAvg > MIN_THRESHOLD && lowAvg > runningAvg * SPIKE_FACTOR
 
-        let midSum = 0
-        for (let i = LOW_END; i < MID_END; i++) midSum += freqData[i]
-        const midAvg = midSum / (MID_END - LOW_END)
+        if (isSpike) {
+          let midSum = 0
+          for (let i = LOW_END; i < MID_END; i++) midSum += freqData[i]
+          const midAvg = midSum / (MID_END - LOW_END)
 
-        if (lowAvg > SMACK_THRESHOLD && midAvg < lowAvg * VOICE_RATIO) {
-          handleSpankRef.current()
-          cooldownRef.current = true
-          setTimeout(() => {
-            cooldownRef.current = false
-          }, SMACK_COOLDOWN)
+          if (midAvg < lowAvg * VOICE_RATIO) {
+            handleSpankRef.current()
+            cooldownRef.current = true
+            setTimeout(() => {
+              cooldownRef.current = false
+            }, SMACK_COOLDOWN)
+          }
         }
       }
 
@@ -336,8 +354,8 @@ export default function MoanMac() {
   return (
     <div className="h-dvh w-screen bg-black flex flex-col items-center justify-center overflow-hidden select-none relative">
       {/* logo */}
-      <h1 className={cnm('absolute top-8 text-2xl sm:text-3xl font-bold tracking-[-0.06em] transition-colors', accent)}>
-        MOANTOP.COM
+      <h1 className={cnm('absolute top-8 text-3xl sm:text-4xl font-bold tracking-[-0.06em] transition-colors', accent)}>
+        MOANTOP.XYZ
       </h1>
 
       {/* pause/play toggle */}
@@ -374,21 +392,26 @@ export default function MoanMac() {
       <RobotFace gender={gender} hitCount={hitCount} soundType={soundType} />
 
       {!isListening && (
-        <button
-          onClick={() => {
-            startedRef.current = true
-            startListening()
-          }}
-          className={cnm(
-            'mt-10 px-8 py-4 border rounded-none text-base sm:text-lg font-mono tracking-wider uppercase transition-colors',
-            accentBorder,
-            accent,
-            accentBg,
-            micError && 'border-red-500/50 text-red-400 hover:bg-red-500/10',
+        <>
+          <button
+            onClick={() => {
+              startedRef.current = true
+              startListening()
+            }}
+            className={cnm(
+              'mt-10 px-8 py-4 rounded-none text-base sm:text-lg font-mono tracking-wider uppercase transition-colors',
+              gender === 'female'
+                ? 'bg-pink-400 text-black hover:bg-pink-300'
+                : 'bg-blue-400 text-black hover:bg-blue-300',
+              micError && 'bg-red-500 text-white hover:bg-red-400',
+            )}
+          >
+            {micError ? 'Retry' : 'Smack Me'}
+          </button>
+          {!micError && (
+            <p className="mt-3 text-xs font-mono text-neutral-500 animate-pulse">click this first!</p>
           )}
-        >
-          {micError ? 'Retry' : 'Smack Me'}
-        </button>
+        </>
       )}
 
       {DEBUG && isListening && (

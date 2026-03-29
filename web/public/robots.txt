@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://moantop.com/sitemap.xml
+Sitemap: https://moantop.xyz/sitemap.xml
