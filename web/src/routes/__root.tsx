@@ -58,7 +58,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
               applicationCategory: 'EntertainmentApplication',
               operatingSystem: 'Any',
               offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
-              author: { '@type': 'Person', name: 'kelvinkn17', url: 'https://github.com/kelvinkn17' },
+              author: { '@type': 'Organization', name: 'Kwek Kwek Labs', url: 'https://github.com/kwekkweklabs' },
             }),
           }}
         />

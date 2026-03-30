@@ -26,7 +26,7 @@ export const config: AppConfig = {
   // Social links
   links: {
     twitter: '',
-    github: 'https://github.com/kelvinkn17/moantop',
+    github: 'https://github.com/kwekkweklabs/moantop',
     telegram: '',
     discord: '',
     docs: '',
